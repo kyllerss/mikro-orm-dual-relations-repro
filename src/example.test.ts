@@ -1,63 +1,7 @@
-import { Cascade, Collection, Entity, ManyToOne, MikroORM, OneToMany, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import { Cascade, Collection, Entity, ManyToOne, MikroORM, OneToMany, OneToOne, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import { User } from './User';
+import { BasePicture, CoverPicture, ProfilePicture } from './Pictures';
 
-@Entity()
-class User {
-
-  @PrimaryKey()
-  id!: number;
-
-  @OneToMany({entity: () => CoverPicture, 
-    mappedBy: 'cover_user',
-    orphanRemoval: true, 
-    eager: true,
-    cascade: [Cascade.ALL]})
-  cover_pictures: Collection<CoverPicture> = new Collection<CoverPicture>(this);
-
-  @OneToMany({entity: () => ProfilePicture, 
-    mappedBy: 'profile_user',
-    orphanRemoval: true, 
-    eager: true,
-    cascade: [Cascade.ALL]})
-  profile_pictures: Collection<ProfilePicture> = new Collection<ProfilePicture>(this);
-}
-
-@Entity({abstract: true, discriminatorColumn: 'type'}) 
-abstract class BasePicture {
-
-  @PrimaryKey()
-  id!: number;
-
-  @Property({type: 'string', nullable: false})
-  path: string;
-
-  constructor(path: string) {
-    this.path = path;
-  }
-}    
-
-@Entity({discriminatorValue: 'cover'})
-class CoverPicture extends BasePicture {
-
-  @ManyToOne({entity: () => User})
-  cover_user: User;
-
-  constructor(path: string, user: User) {
-    super(path);
-    this.cover_user = user;
-  }
-}
-
-@Entity({discriminatorValue: 'profile'})
-class ProfilePicture extends BasePicture {
-
-  @ManyToOne({entity: () => User})
-  profile_user: User;
-
-  constructor(path: string, user: User) {
-    super(path);
-    this.profile_user = user;
-  }
-}
 
 let orm: MikroORM;
 
@@ -78,37 +22,35 @@ afterAll(async () => {
 test('user should be able to create/update pictures', async () => {
   
   let user = new User();
+  user.id = 1;
+  user.cover_picture = new CoverPicture('/path/1');
+  user.cover_picture.cover_user = user;
+  user.cover_picture.id = 10;
+  user.profile_picture = new ProfilePicture('/path/2');
+  user.profile_picture.profile_user = user;
+  user.profile_picture.id = 11;
+
   orm.em.create(User, user);
   await orm.em.persist(user).flush();
   orm.em.clear();
 
   user = await orm.em.findOneOrFail(User, { id: user.id });
-  user.cover_pictures.add(new CoverPicture('/path/1', user));
-  user.profile_pictures.add(new ProfilePicture('/path/2', user));
-  await orm.em.persist(user).flush();
-  orm.em.clear();
+  expect(user.cover_picture).toBeDefined();
+  expect(user.profile_picture).toBeDefined();
 
-  user = await orm.em.findOneOrFail(User, { id: user.id });
-  expect(user.cover_pictures.length).toBe(1);
-  expect(user.profile_pictures.length).toBe(1);
-
-  // update pictures
-  // let cover_picture = user.cover_pictures[0];
-  // let profile_picture = user.profile_pictures[0];
-  // user.cover_pictures.remove(cover_picture);
-  // user.profile_pictures.remove(profile_picture);
-  user.cover_pictures.removeAll();
-  user.profile_pictures.removeAll();
-
-  user.cover_pictures.add(new CoverPicture('/path/3', user));
-  user.profile_pictures.add(new ProfilePicture('/path/4', user));
+  user.cover_picture = new CoverPicture('/path/3');
+  user.cover_picture.cover_user = user;
+  user.cover_picture.id = 20;
+  user.profile_picture = new ProfilePicture('/path/4');
+  user.profile_picture.profile_user = user;
+  user.profile_picture.id = 21;
 
   await orm.em.persist(user).flush();
   orm.em.clear();  
 
   user = await orm.em.findOneOrFail(User, { id: user.id });
-  expect(user.cover_pictures.length).toBe(1);
-  expect(user.profile_pictures.length).toBe(1);
-  expect(user.cover_pictures[0].path).toBe('/path/3');
-  expect(user.profile_pictures[0].path).toBe('/path/4');
+  expect(user.cover_picture).toBeDefined();
+  expect(user.profile_picture).toBeDefined();
+  expect(user.cover_picture!.path).toBe('/path/3');
+  expect(user.profile_picture!.path).toBe('/path/4');
 });
